@@ -25,7 +25,7 @@ func NewGaussian(mu float64, sigma float64) *Gaussian{
         tau: mu*pi,
     }
 }
-func AddGaussian(g1 Gaussian, g2 Gaussian) *Gaussian{
+func AddGaussian(g1 *Gaussian, g2 *Gaussian) *Gaussian{
     return NewGaussian(g1.mu()+g2.mu(), math.Sqrt(g1.sigma()*g1.sigma()+g2.sigma()*g2.sigma()))
 }
 func SubGaussian(g1 *Gaussian, g2 *Gaussian) *Gaussian{
@@ -71,31 +71,52 @@ func main() {
     propogated_exp:= propogateDraw(outcome_exp, 0.74)
     fmt.Println(propogated_exp)
 
-    team_skills := []*Gaussian {NewGaussian(2,2), NewGaussian(1,1), NewGaussian(3,1.5)}
-    is_draw := []bool {true, false}
+    team_skills := []*Gaussian {NewGaussian(4,2), NewGaussian(3.5,1), NewGaussian(3,1.5)}
+    is_draw := []bool {false, false}
 
     draw_margin := 0.74
-    prior_outcomes := []*Gaussian {}
-    posterior_outcomes :=  []*Gaussian {}
+    
+    for j:=0; j<10; j++ {
+        fmt.Printf("Step %d\n", j)
+        max_delta := 0.
+        // Right team update
+        fmt.Println("Right")
+        for i:=1; i<len(team_skills); i++ {
+            prior := SubGaussian(team_skills[i-1], team_skills[i])
+            var posterior *Gaussian
+            if is_draw[i-1] {
+                posterior = propogateDraw(prior, draw_margin)
+            } else {
+                posterior = propogateWin(prior, draw_margin)
+            }
 
-    // Right team update
-    for i:=1; i<len(team_skills); i++ {
-        prior := SubGaussian(team_skills[i-1], team_skills[i])
-        var posterior *Gaussian
-        if is_draw[i-1] {
-            posterior = propogateWin(prior, draw_margin)
-        } else {
-            posterior = propogateDraw(prior, draw_margin)
+            sampler := DivGaussian(posterior, prior)
+            new_skill := MultGaussian(team_skills[i], SubGaussian(team_skills[i-1], sampler))
+            max_delta = max(max_delta, math.Abs(team_skills[i].pi-new_skill.pi), math.Abs(team_skills[i].tau-new_skill.tau))
+            fmt.Printf("Replaced skill %d from %s -> %s\n", i, team_skills[i], new_skill)
+            team_skills[i] = new_skill
         }
 
-        prior_outcomes = append(prior_outcomes, prior)
-        posterior_outcomes = append(posterior_outcomes, posterior)
-        sampler := DivGaussian(posterior, prior)
-        team_skills[i] = MultGaussian(team_skills[i], SubGaussian(team_skills[i-1], sampler))
+        fmt.Println("Left")
+        // Left team update
+        for i:=1; i<len(team_skills); i++ {
+            prior := SubGaussian(team_skills[i-1], team_skills[i])
+            var posterior *Gaussian
+            if is_draw[i-1] {
+                posterior = propogateDraw(prior, draw_margin)
+            } else {
+                posterior = propogateWin(prior, draw_margin)
+            }
+
+            sampler := DivGaussian(posterior, prior)
+            new_skill := MultGaussian(team_skills[i-1], AddGaussian(team_skills[i], sampler))
+            max_delta = max(max_delta, math.Abs(team_skills[i].pi-new_skill.pi), math.Abs(team_skills[i].tau-new_skill.tau))
+            fmt.Printf("Replaced skill %d from %s -> %s\n", i-1, team_skills[i-1], new_skill)
+            team_skills[i-1] = new_skill
+        }
+        fmt.Println(max_delta)
     }
     fmt.Println(draw_margin)
-    fmt.Println(prior_outcomes)
-    fmt.Println(posterior_outcomes)
     fmt.Println(team_skills)
    //fmt.Println(NewGaussian(avg, 
 }

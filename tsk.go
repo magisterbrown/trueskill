@@ -46,6 +46,9 @@ func DivGaussian(g1 *Gaussian, g2 *Gaussian) *Gaussian{
         tau: g1.tau-g2.tau,
     }
 }
+func distance(g1 *Gaussian, g2 *Gaussian) float64{
+    return max(math.Sqrt(math.Abs(g1.pi-g2.pi)), math.Abs(g1.tau-g2.tau))
+}
 
 func propogateWin(g *Gaussian, draw_margin float64) *Gaussian{
     return propogateExpectation(g, draw_margin, math.Inf(1))
@@ -57,7 +60,7 @@ func propogateExpectation(g *Gaussian, low float64, high float64) *Gaussian{
     avg := 0.
     avg_squared := 0.
     idx := 0.
-    for range 8000000 {
+    for range 800000 {
         vl := rand.NormFloat64()*g.sigma()+g.mu()
         if(vl>low && vl<high) {
             avg = (vl+idx*avg)/(idx+1)
@@ -97,7 +100,6 @@ func main() {
     draw_margin := 0.74
     
     for j:=0; j<10; j++ {
-        fmt.Printf("Step %d\n", j)
         max_delta := 0.
         // Right team update
         for i:=1; i<len(team_skills)-1; i++ {
@@ -112,7 +114,7 @@ func main() {
             }
 
             sampler := SubGaussian(winner_skill, DivGaussian(posterior, prior))
-            max_delta = max(max_delta, math.Sqrt(math.Abs(prior.pi-posterior.pi)), math.Abs(prior.tau-posterior.tau))
+            max_delta = max(max_delta, distance(sampler, samplers_winner[i]))
             samplers_winner[i] = sampler
         }
 
@@ -129,11 +131,13 @@ func main() {
             }
 
             sampler := AddGaussian(looser_skill, DivGaussian(posterior, prior))
-            max_delta = max(max_delta, math.Sqrt(math.Abs(prior.pi-posterior.pi)), math.Abs(prior.tau-posterior.tau))
+            max_delta = max(max_delta, distance(sampler, samplers_looser[i-1]))
             samplers_looser[i-1] = sampler
         }
         //prts()
-        //fmt.Printf("Max delta left: %f\n", max_delta)
+        if(max_delta<0.02){
+            break
+        }
     }
     var posterior *Gaussian
     winner_skill := MultGaussian(team_skills[0], samplers_winner[0])

@@ -75,14 +75,66 @@ func p(g *Gaussian) string{
 }
 
 func main() {
-    outcome_exp:= NewGaussian(-5,6.9)
-    fmt.Println(outcome_exp)
-    propogated_exp:= propogateDraw(outcome_exp, 0.74)
-    fmt.Println(propogated_exp)
 
     //team_skills := []*Gaussian {NewGaussian(4,2), NewGaussian(3.5,1), NewGaussian(3,1.5)}
-    team_skills := []*Gaussian {NewGaussian(1,5.135), NewGaussian(3,5.135), NewGaussian(6,5.135), NewGaussian(14,5.135)}
-    is_draw := []bool {false, false, false, false}
+    player_skills := []*Gaussian {NewGaussian(1,5.135), NewGaussian(3,5.135), NewGaussian(6,5.135), NewGaussian(14,5.135)}
+	team_ids := []int {0,1,2,1}
+	team_places := []int {0,2,1}
+	if(len(team_ids) != len(player_skills)){
+		panic("Some players are not assigned a team")
+	}
+	max_team_id := -1
+	for i := range team_ids {
+		if(team_ids[i] < 0){
+			panic(fmt.Sprintf("Team %d can not have negative id", i))
+		}
+		if(team_ids[i] > len(team_places)-1){
+			panic(fmt.Sprintf("Team with id %d does not have a place", team_ids[i]))
+		}
+		if(team_ids[i] > max_team_id) {
+			max_team_id = team_ids[i]
+		}
+	}
+	team_skills := make([]*Gaussian, max_team_id+1)
+    team_order := make([]int, len(team_skills))
+	player_pos := make([]int, len(player_skills))
+	is_draw := make([]bool, len(team_skills)-1)
+	fmt.Println(team_places)
+
+	// Team skills orderring
+	var prev_min int
+	for i := range team_skills {
+		min_place := math.MaxInt
+		best_idx := -1
+		for j := range team_places {
+			if(team_places[j]<min_place){
+				best_idx = j
+				min_place = team_places[j]
+			}
+		}
+		if(i>0) {
+			is_draw[i-1] = prev_min == min_place
+		}
+		prev_min = min_place 
+		team_places[best_idx] = math.MaxInt
+        team_order[i] = best_idx
+		for j := range team_ids {
+			if(team_ids[j] == best_idx) {
+				if(team_skills[i] == nil){
+					team_skills[i] = player_skills[j]
+				} else {
+					team_skills[i] = AddGaussian(team_skills[i],player_skills[j])
+				}
+				player_pos[j] = i
+			}
+		}
+
+	}
+	fmt.Println(player_skills)
+	fmt.Println(team_ids)
+	fmt.Println(team_skills)
+	fmt.Println(player_pos)
+	fmt.Println(is_draw)
     samplers_winner := make([]*Gaussian, len(team_skills))
     samplers_looser := make([]*Gaussian, len(team_skills))
     for i := range team_skills{
@@ -135,6 +187,7 @@ func main() {
             samplers_looser[i-1] = sampler
         }
         //prts()
+		fmt.Printf("Max delta %f\n", max_delta)
         if(max_delta<0.02){
             break
         }
@@ -165,7 +218,24 @@ func main() {
     sampler = SubGaussian(winner_skill, DivGaussian(posterior, prior))
     samplers_winner[last] = sampler
 
-    fmt.Println(team_skills)
-    prts()
+	//player_samples := make([]*Gaussian, len(player_skills))
+	new_player_skills := make([]*Gaussian, len(player_skills))
+    //fmt.Println(player_pos)
+	for i := range player_skills {
+        team_pos := player_pos[i]		
+        sampler := MultGaussian(samplers_winner[team_pos], samplers_looser[team_pos])
+        fmt.Printf("Player %d\n", i)
+        for j := range player_skills {
+            if(j!=i && team_order[team_pos] == team_ids[j]) {
+                fmt.Printf("  Adding player %d\n", j)
+                sampler = AddGaussian(sampler, player_skills[j])
+            }
+        }
+        new_player_skills[i] = MultGaussian(player_skills[i], sampler)
+        //player_skill := player_skills[i]
+	}
+    fmt.Println(player_skills)
+    fmt.Println(new_player_skills)
+
    //fmt.Println(NewGaussian(avg, 
 }

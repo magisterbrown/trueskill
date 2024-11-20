@@ -74,10 +74,35 @@ func p(g *Gaussian) string{
     return g.String()
 }
 
+var MU = 25.
+var SIGMA = MU / 3
+var BETA = SIGMA / 2
+var TAU = SIGMA / 100
+//DRAW_PROBABILITY = .10
+//DELTA = 0.0001
+
+
 func main() {
 
     //team_skills := []*Gaussian {NewGaussian(4,2), NewGaussian(3.5,1), NewGaussian(3,1.5)}
-    player_skills := []*Gaussian {NewGaussian(1,5.135), NewGaussian(3,5.135), NewGaussian(6,5.135), NewGaussian(14,5.135)}
+    input_skills := []*Gaussian {NewGaussian(1,3), NewGaussian(3,3), NewGaussian(6,3), NewGaussian(14,3)}
+
+    prior_skills := make([]*Gaussian, len(input_skills))
+
+    for i := range input_skills {
+        prior_skills[i] = NewGaussian(input_skills[i].mu(), math.Sqrt(input_skills[i].sigma()*input_skills[i].sigma() + TAU*TAU))
+    }
+    fmt.Println(prior_skills)
+
+    likelihood_skills := make([]*Gaussian, len(input_skills))
+    for i := range input_skills {
+        likelihood_skills[i] = NewGaussian(prior_skills[i].mu(), math.Sqrt(prior_skills[i].sigma()*input_skills[i].sigma() + BETA*BETA))
+    }
+    fmt.Println(likelihood_skills)
+
+    player_skills := likelihood_skills
+    
+    //player_skills := []*Gaussian {NewGaussian(1,5.135), NewGaussian(3,5.135), NewGaussian(6,5.135), NewGaussian(14,5.135)}
 	team_ids := []int {0,1,2,1}
 	team_places := []int {0,2,1}
 	if(len(team_ids) != len(player_skills)){

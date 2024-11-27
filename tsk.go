@@ -51,16 +51,16 @@ func distance(g1 *Gaussian, g2 *Gaussian) float64{
 }
 
 func propogateWin(g *Gaussian, draw_margin float64) *Gaussian{
-    return propogateExpectation(g, draw_margin, math.Inf(1))
+    return propogateExpectationA(g, draw_margin, math.Inf(1))
 }
 func propogateDraw(g *Gaussian, draw_margin float64) *Gaussian{
-    return propogateExpectation(g, -draw_margin, draw_margin)
+    return propogateExpectationA(g, -draw_margin, draw_margin)
 }
 func propogateExpectation(g *Gaussian, low float64, high float64) *Gaussian{
     avg := 0.
     avg_squared := 0.
     idx := 0.
-    for range 800000 {
+    for range 8000000 {
         vl := rand.NormFloat64()*g.sigma()+g.mu()
         if(vl>low && vl<high) {
             avg = (vl+idx*avg)/(idx+1)
@@ -70,6 +70,42 @@ func propogateExpectation(g *Gaussian, low float64, high float64) *Gaussian{
     }
     return NewGaussian(avg, math.Sqrt(avg_squared-avg*avg))
 }
+
+func pdf(x float64) float64 {
+    return math.Exp(-(x*x)/2)/math.Sqrt(2*math.Pi);
+}
+func cdf(x float64) float64 {
+    if x==math.Inf(1) {
+        return 1.;
+    } else if x==math.Inf(-1) {
+        return 0.;
+    }
+    return (1+math.Erf(x/math.Sqrt(2)))/2;
+}
+
+func propogateExpectationA(g *Gaussian, low float64, high float64) *Gaussian{
+    alpha := (low-g.mu())/g.sigma();
+    beta := (high-g.mu())/g.sigma();
+    
+    Z := cdf(beta) - cdf(alpha)
+    
+    new_mu := g.mu()+g.sigma()*(pdf(alpha)-pdf(beta))/Z
+    bmul := beta*pdf(beta);
+    if beta == math.Inf(1) {
+        bmul = 0;
+    }
+    amul := alpha*pdf(alpha);
+    if alpha == math.Inf(-1) {
+        amul = 0;
+    }
+
+    new_sigma := math.Sqrt(1 - (bmul-amul)/Z - math.Pow((pdf(alpha)-pdf(beta))/Z, 2))*g.sigma();
+    fmt.Println(new_sigma);
+
+    return NewGaussian(new_mu,new_sigma)
+}
+
+
 func p(g *Gaussian) string{
     return g.String()
 }
@@ -83,9 +119,15 @@ var TAU = SIGMA / 100
 
 
 func main() {
+    //gs := NewGaussian(3,6)
+    //top := -10.
+    //bot := math.Inf(-1)
+    //fmt.Println(propogateExpectation(gs, bot, top))
+    //fmt.Println(propogateExpectationA(gs, bot, top))
+
 
     //team_skills := []*Gaussian {NewGaussian(4,2), NewGaussian(3.5,1), NewGaussian(3,1.5)}
-    input_skills := []*Gaussian {NewGaussian(1,3), NewGaussian(3,3), NewGaussian(6,3), NewGaussian(14,3)}
+    input_skills := []*Gaussian {NewGaussian(1,3), NewGaussian(3,3), NewGaussian(4,3) , NewGaussian(6,3), NewGaussian(14,3)}
 
     prior_skills := make([]*Gaussian, len(input_skills))
 
@@ -103,8 +145,8 @@ func main() {
     player_skills := likelihood_skills
     
     //player_skills := []*Gaussian {NewGaussian(1,5.135), NewGaussian(3,5.135), NewGaussian(6,5.135), NewGaussian(14,5.135)}
-	team_ids := []int {0,1,2,1}
-	team_places := []int {0,2,1}
+	team_ids := []int {0,1,1,2,3}
+	team_places := []int {0,1,2,3}
 	if(len(team_ids) != len(player_skills)){
 		panic("Some players are not assigned a team")
 	}
@@ -175,6 +217,9 @@ func main() {
     prts()
 
     draw_margin := 0.74
+    for i := range team_skills {
+            fmt.Println(team_skills[i]);
+    }
     
     for j:=0; j<10; j++ {
         max_delta := 0.
@@ -213,10 +258,12 @@ func main() {
         }
         //prts()
 		fmt.Printf("Max delta %f\n", max_delta)
-        if(max_delta<0.02){
+        if(max_delta<0.002){
             break
         }
     }
+    prts()
+    return;
     var posterior *Gaussian
     winner_skill := MultGaussian(team_skills[0], samplers_winner[0])
     looser_skill := MultGaussian(team_skills[1], samplers_looser[1])
@@ -259,6 +306,8 @@ func main() {
         new_player_skills[i] = MultGaussian(player_skills[i], sampler)
         //player_skill := player_skills[i]
 	}
+
+    fmt.Println(input_skills)
     fmt.Println(player_skills)
     fmt.Println(new_player_skills)
 

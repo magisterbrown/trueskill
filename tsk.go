@@ -21,6 +21,10 @@ func (g Gaussian) sigma() float64 {
 func (g Gaussian) String() string {
     return fmt.Sprintf("Gaussian(mu: %f, sigma: %f)", g.mu(), g.sigma())
 }
+
+func pg(g *Gaussian) string{
+    return g.String()
+}
 func NewGaussian(mu float64, sigma float64) *Gaussian{
     pi := 1/(sigma*sigma)
     return &Gaussian{
@@ -82,6 +86,9 @@ func cdf(x float64) float64 {
     }
     return (1+math.Erf(x/math.Sqrt(2)))/2;
 }
+func ppf(x float64) float64 {
+    return math.Erfinv(2*x-1)*math.Sqrt(2);
+}
 
 func propogateExpectationA(g *Gaussian, low float64, high float64) *Gaussian{
     alpha := (low-g.mu())/g.sigma();
@@ -100,21 +107,17 @@ func propogateExpectationA(g *Gaussian, low float64, high float64) *Gaussian{
     }
 
     new_sigma := math.Sqrt(1 - (bmul-amul)/Z - math.Pow((pdf(alpha)-pdf(beta))/Z, 2))*g.sigma();
-    fmt.Println(new_sigma);
 
     return NewGaussian(new_mu,new_sigma)
 }
 
 
-func p(g *Gaussian) string{
-    return g.String()
-}
 
 var MU = 25.
 var SIGMA = MU / 3
 var BETA = SIGMA / 2
 var TAU = SIGMA / 100
-//DRAW_PROBABILITY = .10
+var DRAW_PROBABILITY = .10
 //DELTA = 0.0001
 
 
@@ -128,6 +131,7 @@ func main() {
 
     //team_skills := []*Gaussian {NewGaussian(4,2), NewGaussian(3.5,1), NewGaussian(3,1.5)}
     input_skills := []*Gaussian {NewGaussian(1,3), NewGaussian(3,3), NewGaussian(4,3) , NewGaussian(6,3), NewGaussian(14,3)}
+    fmt.Println(pg(input_skills[0]));
 
     prior_skills := make([]*Gaussian, len(input_skills))
 
@@ -166,11 +170,12 @@ func main() {
     team_order := make([]int, len(team_skills))
 	player_pos := make([]int, len(player_skills))
 	is_draw := make([]bool, len(team_skills)-1)
-	fmt.Println(team_places)
+	team_sizes := make([]float64, len(team_skills))
 
 	// Team skills orderring
 	var prev_min int
 	for i := range team_skills {
+        team_sizes[i] = 1
 		min_place := math.MaxInt
 		best_idx := -1
 		for j := range team_places {
@@ -191,6 +196,7 @@ func main() {
 					team_skills[i] = player_skills[j]
 				} else {
 					team_skills[i] = AddGaussian(team_skills[i],player_skills[j])
+                    team_sizes[i]+=1
 				}
 				player_pos[j] = i
 			}
@@ -202,6 +208,13 @@ func main() {
 	fmt.Println(team_skills)
 	fmt.Println(player_pos)
 	fmt.Println(is_draw)
+    fmt.Println(team_sizes)
+	draw_margins := make([]float64, len(team_skills)-1)
+
+    for i := range draw_margins {
+       draw_margins[i] = ppf((DRAW_PROBABILITY+1)/2)*BETA*math.Sqrt(team_sizes[i]+team_sizes[i+1]);
+    }
+    fmt.Println(draw_margins)
     samplers_winner := make([]*Gaussian, len(team_skills))
     samplers_looser := make([]*Gaussian, len(team_skills))
     for i := range team_skills{
@@ -216,13 +229,15 @@ func main() {
     }
     prts()
 
-    draw_margin := 0.74
+    //draw_margin := 0.74
+    //draw_margin := 0.91
     for i := range team_skills {
             fmt.Println(team_skills[i]);
     }
     
     for j:=0; j<10; j++ {
         max_delta := 0.
+        prts()
         // Right team update
         for i:=1; i<len(team_skills)-1; i++ {
             winner_skill := MultGaussian(team_skills[i-1], samplers_winner[i-1])
@@ -230,9 +245,9 @@ func main() {
             prior := SubGaussian(winner_skill, looser_skill)
             var posterior *Gaussian
             if is_draw[i-1] {
-                posterior = propogateDraw(prior, draw_margin)
+                posterior = propogateDraw(prior, draw_margins[i-1])
             } else {
-                posterior = propogateWin(prior, draw_margin)
+                posterior = propogateWin(prior, draw_margins[i-1])
             }
 
             sampler := SubGaussian(winner_skill, DivGaussian(posterior, prior))
@@ -240,6 +255,7 @@ func main() {
             samplers_winner[i] = sampler
         }
 
+        prts()
         // Left team update
         for i:=len(team_skills)-1; i>1; i-- {
             winner_skill := MultGaussian(team_skills[i-1], samplers_winner[i-1])
@@ -247,31 +263,31 @@ func main() {
             prior := SubGaussian(winner_skill, looser_skill)
             var posterior *Gaussian
             if is_draw[i-1] {
-                posterior = propogateDraw(prior, draw_margin)
+                posterior = propogateDraw(prior, draw_margins[i-1])
             } else {
-                posterior = propogateWin(prior, draw_margin)
+                posterior = propogateWin(prior, draw_margins[i-1])
             }
 
             sampler := AddGaussian(looser_skill, DivGaussian(posterior, prior))
             max_delta = max(max_delta, distance(sampler, samplers_looser[i-1]))
             samplers_looser[i-1] = sampler
         }
-        //prts()
+
+        prts()
 		fmt.Printf("Max delta %f\n", max_delta)
         if(max_delta<0.002){
             break
         }
     }
-    prts()
     return;
     var posterior *Gaussian
     winner_skill := MultGaussian(team_skills[0], samplers_winner[0])
     looser_skill := MultGaussian(team_skills[1], samplers_looser[1])
     prior := SubGaussian(winner_skill, looser_skill)
     if is_draw[0] {
-        posterior = propogateDraw(prior, draw_margin)
+        posterior = propogateDraw(prior, draw_margins[0])
     } else {
-        posterior = propogateWin(prior, draw_margin)
+        posterior = propogateWin(prior, draw_margins[0])
     }
     sampler := AddGaussian(looser_skill, DivGaussian(posterior, prior))
     samplers_looser[0] = sampler
@@ -282,9 +298,9 @@ func main() {
     looser_skill = MultGaussian(team_skills[last], samplers_looser[last])
     prior = SubGaussian(winner_skill, looser_skill)
     if is_draw[last-1] {
-        posterior = propogateDraw(prior, draw_margin)
+        posterior = propogateDraw(prior, draw_margins[last-1])
     } else {
-        posterior = propogateWin(prior, draw_margin)
+        posterior = propogateWin(prior, draw_margins[last-1])
     }
 
     sampler = SubGaussian(winner_skill, DivGaussian(posterior, prior))

@@ -279,7 +279,6 @@ func main() {
             break
         }
     }
-    return;
     var posterior *Gaussian
     winner_skill := MultGaussian(team_skills[0], samplers_winner[0])
     looser_skill := MultGaussian(team_skills[1], samplers_looser[1])
@@ -306,21 +305,21 @@ func main() {
     sampler = SubGaussian(winner_skill, DivGaussian(posterior, prior))
     samplers_winner[last] = sampler
 
-	//player_samples := make([]*Gaussian, len(player_skills))
 	new_player_skills := make([]*Gaussian, len(player_skills))
-    //fmt.Println(player_pos)
 	for i := range player_skills {
         team_pos := player_pos[i]		
         sampler := MultGaussian(samplers_winner[team_pos], samplers_looser[team_pos])
         fmt.Printf("Player %d\n", i)
         for j := range player_skills {
             if(j!=i && team_order[team_pos] == team_ids[j]) {
-                fmt.Printf("  Adding player %d\n", j)
-                sampler = AddGaussian(sampler, player_skills[j])
+                fmt.Printf("  Subbing player %d\n", j)
+                sampler = SubGaussian(sampler, player_skills[j])
             }
         }
-        new_player_skills[i] = MultGaussian(player_skills[i], sampler)
-        //player_skill := player_skills[i]
+        perf_sampler := NewGaussian(sampler.mu(), math.Sqrt(sampler.sigma()*sampler.sigma() + BETA*BETA))
+        fmt.Println(perf_sampler)
+        fmt.Println(prior_skills[i])
+        new_player_skills[i] = MultGaussian(prior_skills[i], perf_sampler)
 	}
 
     fmt.Println(input_skills)

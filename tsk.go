@@ -22,9 +22,6 @@ func (g Gaussian) String() string {
     return fmt.Sprintf("Gaussian(mu: %f, sigma: %f)", g.mu(), g.sigma())
 }
 
-func pg(g *Gaussian) string{
-    return g.String()
-}
 func NewGaussian(mu float64, sigma float64) *Gaussian{
     pi := 1/(sigma*sigma)
     return &Gaussian{
@@ -118,7 +115,6 @@ var SIGMA = MU / 3
 var BETA = SIGMA / 2
 var TAU = SIGMA / 100
 var DRAW_PROBABILITY = .10
-//DELTA = 0.0001
 
 func main() {
     input_skills := []*Gaussian {NewGaussian(1,3), NewGaussian(3,3), NewGaussian(4,3) , NewGaussian(6,3), NewGaussian(14,3)}
@@ -165,6 +161,7 @@ func true_skill(input_skills []*Gaussian, team_ids []int, team_places []int) []*
 	player_pos := make([]int, len(player_skills))
 	is_draw := make([]bool, len(team_skills)-1)
 	team_sizes := make([]float64, len(team_skills))
+    
 
 	// Team skills orderring
 	var prev_min int
@@ -202,46 +199,43 @@ func true_skill(input_skills []*Gaussian, team_ids []int, team_places []int) []*
     for i := range draw_margins {
        draw_margins[i] = ppf((DRAW_PROBABILITY+1)/2)*BETA*math.Sqrt(team_sizes[i]+team_sizes[i+1]);
     }
+
     samplers_winner := make([]*Gaussian, len(team_skills))
     samplers_looser := make([]*Gaussian, len(team_skills))
+    get_head_sampler := func(idx int) (*Gaussian, *Gaussian, *Gaussian) {
+            winner_skill := MultGaussian(team_skills[idx-1], samplers_winner[idx-1])
+            looser_skill := MultGaussian(team_skills[idx], samplers_looser[idx])
+            prior := SubGaussian(winner_skill, looser_skill)
+            var posterior *Gaussian
+            if is_draw[idx-1] {
+                posterior = propogateDraw(prior, draw_margins[idx-1])
+            } else {
+                posterior = propogateWin(prior, draw_margins[idx-1])
+            }
+            return DivGaussian(posterior, prior), winner_skill, looser_skill
+    }
     for i := range team_skills{
         samplers_winner[i] = &Gaussian{pi:0, tau:0}
         samplers_looser[i] = &Gaussian{pi:0, tau:0}
     }
-
+    
     
     for j:=0; j<10; j++ {
         max_delta := 0.
         // Right team update
         for i:=1; i<len(team_skills)-1; i++ {
-            winner_skill := MultGaussian(team_skills[i-1], samplers_winner[i-1])
-            looser_skill := MultGaussian(team_skills[i], samplers_looser[i])
-            prior := SubGaussian(winner_skill, looser_skill)
-            var posterior *Gaussian
-            if is_draw[i-1] {
-                posterior = propogateDraw(prior, draw_margins[i-1])
-            } else {
-                posterior = propogateWin(prior, draw_margins[i-1])
-            }
+            head_sampler, winner_skill, _ := get_head_sampler(i)
 
-            sampler := SubGaussian(winner_skill, DivGaussian(posterior, prior))
+            sampler := SubGaussian(winner_skill, head_sampler)
             max_delta = max(max_delta, distance(sampler, samplers_winner[i]))
             samplers_winner[i] = sampler
         }
 
         // Left team update
         for i:=len(team_skills)-1; i>1; i-- {
-            winner_skill := MultGaussian(team_skills[i-1], samplers_winner[i-1])
-            looser_skill := MultGaussian(team_skills[i], samplers_looser[i])
-            prior := SubGaussian(winner_skill, looser_skill)
-            var posterior *Gaussian
-            if is_draw[i-1] {
-                posterior = propogateDraw(prior, draw_margins[i-1])
-            } else {
-                posterior = propogateWin(prior, draw_margins[i-1])
-            }
+            head_sampler, _, looser_skill := get_head_sampler(i)
 
-            sampler := AddGaussian(looser_skill, DivGaussian(posterior, prior))
+            sampler := AddGaussian(looser_skill, head_sampler)
             max_delta = max(max_delta, distance(sampler, samplers_looser[i-1]))
             samplers_looser[i-1] = sampler
         }
@@ -250,30 +244,13 @@ func true_skill(input_skills []*Gaussian, team_ids []int, team_places []int) []*
             break
         }
     }
-    var posterior *Gaussian
-    winner_skill := MultGaussian(team_skills[0], samplers_winner[0])
-    looser_skill := MultGaussian(team_skills[1], samplers_looser[1])
-    prior := SubGaussian(winner_skill, looser_skill)
-    if is_draw[0] {
-        posterior = propogateDraw(prior, draw_margins[0])
-    } else {
-        posterior = propogateWin(prior, draw_margins[0])
-    }
-    sampler := AddGaussian(looser_skill, DivGaussian(posterior, prior))
+    head_sampler, _, looser_skill := get_head_sampler(1)
+    sampler := AddGaussian(looser_skill, head_sampler)
     samplers_looser[0] = sampler
 
-
     last:=len(team_skills)-1
-    winner_skill = MultGaussian(team_skills[last-1], samplers_winner[last-1])
-    looser_skill = MultGaussian(team_skills[last], samplers_looser[last])
-    prior = SubGaussian(winner_skill, looser_skill)
-    if is_draw[last-1] {
-        posterior = propogateDraw(prior, draw_margins[last-1])
-    } else {
-        posterior = propogateWin(prior, draw_margins[last-1])
-    }
-
-    sampler = SubGaussian(winner_skill, DivGaussian(posterior, prior))
+    head_sampler, winner_skill, _ := get_head_sampler(last)
+    sampler = SubGaussian(winner_skill, head_sampler)
     samplers_winner[last] = sampler
 
 	new_player_skills := make([]*Gaussian, len(player_skills))

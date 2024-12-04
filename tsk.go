@@ -120,37 +120,31 @@ var TAU = SIGMA / 100
 var DRAW_PROBABILITY = .10
 //DELTA = 0.0001
 
-
 func main() {
-    //gs := NewGaussian(3,6)
-    //top := -10.
-    //bot := math.Inf(-1)
-    //fmt.Println(propogateExpectation(gs, bot, top))
-    //fmt.Println(propogateExpectationA(gs, bot, top))
-
-
-    //team_skills := []*Gaussian {NewGaussian(4,2), NewGaussian(3.5,1), NewGaussian(3,1.5)}
     input_skills := []*Gaussian {NewGaussian(1,3), NewGaussian(3,3), NewGaussian(4,3) , NewGaussian(6,3), NewGaussian(14,3)}
-    fmt.Println(pg(input_skills[0]));
+	team_ids := []int {0,1,1,2,3}
+	team_places := []int {0,1,2,3}
+    output_skills := true_skill(input_skills, team_ids, team_places)
+    fmt.Println(input_skills);
+    fmt.Println(output_skills);
+}
+func true_skill(input_skills []*Gaussian, team_ids []int, team_places []int) []*Gaussian {
+
+
 
     prior_skills := make([]*Gaussian, len(input_skills))
 
     for i := range input_skills {
         prior_skills[i] = NewGaussian(input_skills[i].mu(), math.Sqrt(input_skills[i].sigma()*input_skills[i].sigma() + TAU*TAU))
     }
-    fmt.Println(prior_skills)
 
     likelihood_skills := make([]*Gaussian, len(input_skills))
     for i := range input_skills {
         likelihood_skills[i] = NewGaussian(prior_skills[i].mu(), math.Sqrt(prior_skills[i].sigma()*input_skills[i].sigma() + BETA*BETA))
     }
-    fmt.Println(likelihood_skills)
 
     player_skills := likelihood_skills
     
-    //player_skills := []*Gaussian {NewGaussian(1,5.135), NewGaussian(3,5.135), NewGaussian(6,5.135), NewGaussian(14,5.135)}
-	team_ids := []int {0,1,1,2,3}
-	team_places := []int {0,1,2,3}
 	if(len(team_ids) != len(player_skills)){
 		panic("Some players are not assigned a team")
 	}
@@ -203,41 +197,21 @@ func main() {
 		}
 
 	}
-	fmt.Println(player_skills)
-	fmt.Println(team_ids)
-	fmt.Println(team_skills)
-	fmt.Println(player_pos)
-	fmt.Println(is_draw)
-    fmt.Println(team_sizes)
 	draw_margins := make([]float64, len(team_skills)-1)
 
     for i := range draw_margins {
        draw_margins[i] = ppf((DRAW_PROBABILITY+1)/2)*BETA*math.Sqrt(team_sizes[i]+team_sizes[i+1]);
     }
-    fmt.Println(draw_margins)
     samplers_winner := make([]*Gaussian, len(team_skills))
     samplers_looser := make([]*Gaussian, len(team_skills))
     for i := range team_skills{
         samplers_winner[i] = &Gaussian{pi:0, tau:0}
         samplers_looser[i] = &Gaussian{pi:0, tau:0}
     }
-    prts:=func() {
-        for i := range team_skills {
-            fmt.Printf("%s ", MultGaussian(MultGaussian(samplers_winner[i], samplers_looser[i]), team_skills[i]).String())
-        }
-        fmt.Printf("\n")
-    }
-    prts()
 
-    //draw_margin := 0.74
-    //draw_margin := 0.91
-    for i := range team_skills {
-            fmt.Println(team_skills[i]);
-    }
     
     for j:=0; j<10; j++ {
         max_delta := 0.
-        prts()
         // Right team update
         for i:=1; i<len(team_skills)-1; i++ {
             winner_skill := MultGaussian(team_skills[i-1], samplers_winner[i-1])
@@ -255,7 +229,6 @@ func main() {
             samplers_winner[i] = sampler
         }
 
-        prts()
         // Left team update
         for i:=len(team_skills)-1; i>1; i-- {
             winner_skill := MultGaussian(team_skills[i-1], samplers_winner[i-1])
@@ -273,8 +246,6 @@ func main() {
             samplers_looser[i-1] = sampler
         }
 
-        prts()
-		fmt.Printf("Max delta %f\n", max_delta)
         if(max_delta<0.002){
             break
         }
@@ -309,22 +280,14 @@ func main() {
 	for i := range player_skills {
         team_pos := player_pos[i]		
         sampler := MultGaussian(samplers_winner[team_pos], samplers_looser[team_pos])
-        fmt.Printf("Player %d\n", i)
         for j := range player_skills {
             if(j!=i && team_order[team_pos] == team_ids[j]) {
-                fmt.Printf("  Subbing player %d\n", j)
                 sampler = SubGaussian(sampler, player_skills[j])
             }
         }
         perf_sampler := NewGaussian(sampler.mu(), math.Sqrt(sampler.sigma()*sampler.sigma() + BETA*BETA))
-        fmt.Println(perf_sampler)
-        fmt.Println(prior_skills[i])
         new_player_skills[i] = MultGaussian(prior_skills[i], perf_sampler)
 	}
 
-    fmt.Println(input_skills)
-    fmt.Println(player_skills)
-    fmt.Println(new_player_skills)
-
-   //fmt.Println(NewGaussian(avg, 
+    return new_player_skills
 }
